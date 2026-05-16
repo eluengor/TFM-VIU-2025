@@ -1,0 +1,436 @@
+import os
+
+configfile: f"{workflow.basedir}/../config/config.yaml"
+
+
+rule all:
+    input:
+        # QC raw reads
+        expand("results/{sample}/00_raw_reads_qc/{sample}_1_fastqc.html", sample=config["samples"]),
+        expand("results/{sample}/00_raw_reads_qc/{sample}_2_fastqc.html", sample=config["samples"]),
+        # Trim reads
+        expand("results/{sample}/01_trim_reads/01_filter/{sample}_1_trim.fastq.gz", sample=config["samples"]),
+        expand("results/{sample}/01_trim_reads/01_filter/{sample}_2_trim.fastq.gz", sample=config["samples"]),
+        # PhiX elimination
+        expand("results/{sample}/01_trim_reads/02_phiX/{sample}_1_clean.fastq.gz", sample=config["samples"]),
+        expand("results/{sample}/01_trim_reads/02_phiX/{sample}_2_clean.fastq.gz", sample=config["samples"]),
+        # QC post-trimming 
+        expand("results/{sample}/01_trim_reads/03_qc/{sample}_1_trim_fastqc.html", sample=config["samples"]),
+        expand("results/{sample}/01_trim_reads/03_qc/{sample}_2_trim_fastqc.html", sample=config["samples"]),      
+        # Subsampling
+        expand("results/{sample}/01_trim_reads/04_subsampling/{sample}_1_sub.fastq.gz", sample=config["samples"]),
+        expand("results/{sample}/01_trim_reads/04_subsampling/{sample}_2_sub.fastq.gz", sample=config["samples"]),
+        # Assembly
+        expand("results/{sample}/02_assembly/{sample}_contigs.fasta", sample=config["samples"]),
+        expand("results/{sample}/02_assembly/qc/quality_summary.tsv", sample=config["samples"]),
+        # Decontamination
+        expand("results/{sample}/03_decontamination/01_viralverify/{sample}_contigs_result_table.csv", sample=config["samples"]),
+        expand("results/{sample}/03_decontamination/02_selected_contig/{sample}_phage.fasta", sample=config["samples"]),
+        # Rearrangement
+        expand("results/{sample}/04_rearrangement/{sample}_sequence.fasta", sample=config["samples"]),
+        expand("results/{sample}/04_rearrangement/{sample}_PhageTerm_report.pdf", sample=config["samples"]),
+        expand("results/{sample}/04_rearrangement/{sample}_statistics.csv", sample=config["samples"]),
+        # Annotation
+        expand("results/{sample}/05_annotation/{sample}_pharokka_output/pharokka.gff", sample=config["samples"]),
+        # Taxonomy
+        expand("results/{sample}/06_taxonomy/{sample}_Summary_file.txt", sample=config["samples"]),
+        # Lifestyle prediction
+        expand("results/{sample}/07_biosecurity/{sample}.fasta.bacphlip", sample=config["samples"]),
+   
+
+# Quality control of raw reads
+rule r00_qc_raw_reads:
+    input:
+        r1 = "data/{sample}/raw_reads/{sample}_1.fastq.gz",
+        r2 = "data/{sample}/raw_reads/{sample}_2.fastq.gz"
+    output:
+        report_r1 = "results/{sample}/00_raw_reads_qc/{sample}_1_fastqc.html",
+        report_r2 = "results/{sample}/00_raw_reads_qc/{sample}_2_fastqc.html",
+        ok = touch("results/{sample}/00_raw_reads_qc/{sample}_qc_done.txt")
+    container:
+        config["containers"]["fastqc"]
+    log:
+        "log/{sample}/00_raw_reads_qc/{sample}.log"
+    threads: 
+        config["tools"]["fastqc"]["threads"]
+    params:
+        extra  = config["tools"]["fastqc"]["extra"],
+        outdir = "results/{sample}/00_raw_reads_qc/"
+    shell:
+        '''
+        fastqc \
+            {input.r1} \
+            {input.r2} \
+            --outdir {params.outdir} \
+            --threads {threads} \
+            {params.extra} \
+            2> {log}
+        '''
+
+
+# Filtering and trimming of raw reads
+rule r01a_trim_reads_filter:
+    input:
+        r1 = "data/{sample}/raw_reads/{sample}_1.fastq.gz",
+        r2 = "data/{sample}/raw_reads/{sample}_2.fastq.gz",
+        ok = touch("results/{sample}/00_raw_reads_qc/{sample}_qc_done.txt")
+    output:
+        r1_trim = "results/{sample}/01_trim_reads/01_filter/{sample}_1_trim.fastq.gz",
+        r2_trim = "results/{sample}/01_trim_reads/01_filter/{sample}_2_trim.fastq.gz",
+        stats   = "results/{sample}/01_trim_reads/01_filter/{sample}_bbduk_stats.txt"
+    container:
+        config["containers"]["bbduk"]
+    log:
+        "log/{sample}/01_trim_reads/01_filter/{sample}.log"
+    threads:
+        config["tools"]["bbduk"]["threads"]
+    params:
+        minlength = config["tools"]["bbduk"]["minlength"],
+        ktrim     = config["tools"]["bbduk"]["ktrim"],
+        k         = config["tools"]["bbduk"]["k"],
+        qtrim     = config["tools"]["bbduk"]["qtrim"],
+        trimq     = config["tools"]["bbduk"]["trimq"],
+        trimpolyg = config["tools"]["bbduk"]["trimpolyg"],
+        trimpolya = config["tools"]["bbduk"]["trimpolya"],
+        phix_ref  = config["tools"]["bbduk"]["phix_ref"]
+    shell:
+        '''
+        bbduk.sh \
+            in1={input.r1} \
+            in2={input.r2} \
+            out1={output.r1_trim} \
+            out2={output.r2_trim} \
+            ref=adapters \
+            stats={output.stats} \
+            minlength={params.minlength} \
+            ktrim={params.ktrim} \
+            k={params.k} \
+            qtrim={params.qtrim} \
+            trimq={params.trimq} \
+            trimpolyg={params.trimpolyg} \
+            trimpolya={params.trimpolya} \
+            threads={threads} \
+            tpe tbo \
+            &> {log}
+        '''
+
+# Elimination of phiX reads
+rule r01b_trim_reads_phix:
+    input:
+        r1 = "results/{sample}/01_trim_reads/01_filter/{sample}_1_trim.fastq.gz",
+        r2 = "results/{sample}/01_trim_reads/01_filter/{sample}_2_trim.fastq.gz"
+    output:
+        r1_phix = "results/{sample}/01_trim_reads/02_phiX/{sample}_1_clean.fastq.gz",
+        r2_phix = "results/{sample}/01_trim_reads/02_phiX/{sample}_2_clean.fastq.gz",
+        stats   = "results/{sample}/01_trim_reads/02_phiX/{sample}_bbduk_stats.txt"
+    container:
+        config["containers"]["bbduk"]
+    log:
+        "log/{sample}/01_trim_reads/02_phiX/{sample}.log"
+    threads:
+        config["tools"]["bbduk"]["threads"]
+    params:
+        ref = "artifacts,phix",
+        k   = 31
+    shell:
+        '''
+        bbduk.sh \
+            in1={input.r1} \
+            in2={input.r2} \
+            out1={output.r1_phix} \
+            out2={output.r2_phix} \
+            ref={params.ref} \
+            stats={output.stats} \
+            k={params.k} \
+            threads={threads} \
+            ordered cardinality \
+            &> {log}
+        '''
+
+
+
+# Quality control of trimmed reads
+rule r01c_qc_trim_reads:
+    input:
+        r1 = "results/{sample}/01_trim_reads/02_phiX/{sample}_1_clean.fastq.gz",
+        r2 = "results/{sample}/01_trim_reads/02_phiX/{sample}_2_clean.fastq.gz"
+    output:
+        report_r1 = "results/{sample}/01_trim_reads/03_qc/{sample}_1_trim_fastqc.html",
+        report_r2 = "results/{sample}/01_trim_reads/03_qc/{sample}_2_trim_fastqc.html"
+    container:
+        config["containers"]["fastqc"]
+    log:
+        "log/{sample}/01_trim_reads/03_qc/{sample}.log"
+    threads:
+        config["tools"]["fastqc"]["threads"]
+    params:
+        extra  = config["tools"]["fastqc"]["extra"],
+        outdir = "results/{sample}/01_trim_reads/03_qc"
+    shell:
+        '''
+        fastqc \
+            {input.r1} \
+            {input.r2} \
+            -o {params.outdir} \
+            {params.extra} \
+            2> {log}
+        '''
+
+
+# Subsampling of clean reads
+rule r01d_trim_reads_subsampling:
+    input:
+        r1 = "results/{sample}/01_trim_reads/02_phiX/{sample}_1_clean.fastq.gz",
+        r2 = "results/{sample}/01_trim_reads/02_phiX/{sample}_2_clean.fastq.gz"
+    output:
+        r1 = "results/{sample}/01_trim_reads/04_subsampling/{sample}_1_sub.fastq.gz",
+        r2 = "results/{sample}/01_trim_reads/04_subsampling/{sample}_2_sub.fastq.gz"
+    log:
+        "log/{sample}/01_trim_reads/04_subsampling/{sample}.log"
+    params:
+        n_reads = config["tools"]["seqtk"]["n_reads"],
+        seed    = config["tools"]["seqtk"]["seed"]
+    threads: 
+        config["tools"]["seqtk"]["threads"]
+    container:
+        config["containers"]["seqtk"]
+    shell:
+        """
+        seqtk sample \
+            -s {params.seed} \
+            {input.r1} \
+            {params.n_reads}| gzip > {output.r1} \
+            2>> {log}
+
+        seqtk sample \
+            -s {params.seed} \
+            {input.r2} \
+            {params.n_reads}| gzip > {output.r2} \
+            2>> {log}
+        """
+
+
+# De novo assembly
+rule r02_assembly:
+    input:
+        r1 = "results/{sample}/01_trim_reads/04_subsampling/{sample}_1_sub.fastq.gz",
+        r2 = "results/{sample}/01_trim_reads/04_subsampling/{sample}_2_sub.fastq.gz"
+    output:
+        contigs = "results/{sample}/02_assembly/{sample}_contigs.fasta"
+    container:
+        config["containers"]["spades"]
+    log:
+        "log/{sample}/02_assembly/{sample}.log"
+    threads:
+        config["tools"]["spades"]["threads"]
+    params:
+        extra  = config["tools"]["spades"]["extra"],
+        outdir = "results/{sample}/02_assembly/"
+    shell:
+        '''
+        spades.py \
+            -1 {input.r1} \
+            -2 {input.r2} \
+            -o {params.outdir} \
+            -t {threads} \
+            {params.extra} \
+             2> {log}
+        
+        mv results/{wildcards.sample}/02_assembly/contigs.fasta results/{wildcards.sample}/02_assembly/{wildcards.sample}_contigs.fasta
+        '''
+
+
+
+# Quality control of assembly
+rule r02_qc_checkv:
+    input:
+        contigs = "results/{sample}/02_assembly/{sample}_contigs.fasta"
+    output:
+        report = "results/{sample}/02_assembly/qc/quality_summary.tsv"
+    params:
+        outdir  = "results/{sample}/02_assembly/qc/",
+        db      = config["databases"]["checkv"]
+    container:
+        config["containers"]["checkv"]
+    log:
+        "log/{sample}/02_assembly/qc/{sample}.log"
+    threads:
+        config["tools"]["checkv"]["threads"]
+    shell:
+        '''
+        checkv end_to_end \
+            {input.contigs} \
+            {params.outdir} \
+            -d {params.db} \
+            -t {threads} \
+            2> {log}
+        '''
+
+
+
+# Elimination of non-viral contigs
+rule r03a_decontamination_viralverify:
+    input:
+        contigs = "results/{sample}/02_assembly/{sample}_contigs.fasta"
+    output:
+        report = "results/{sample}/03_decontamination/01_viralverify/{sample}_contigs_result_table.csv"
+    container:
+        config["containers"]["viralverify"]
+    log:
+        "log/{sample}/03_decontamination/01_viralverify/{sample}.log"
+    params:
+        outdir = "results/{sample}/03_decontamination/01_viralverify/",
+        extra  = config["tools"]["viralverify"]["extra"],
+        db     = config["databases"]["viralverify"] 
+    threads:
+        config["tools"]["viralverify"]["threads"]
+    shell:
+        '''
+        viralverify \
+            -f {input.contigs} \
+            -o {params.outdir} \
+            -t {threads} \
+            --hmm {params.db} \
+            {params.extra} \
+            2> {log} 
+        
+        '''
+    
+
+rule r03b_decontamination_select_phage_contig:
+    input:
+        contigs = "results/{sample}/02_assembly/{sample}_contigs.fasta",
+        report  = "results/{sample}/03_decontamination/01_viralverify/{sample}_contigs_result_table.csv"
+    output:
+        phage_fasta = "results/{sample}/03_decontamination/02_selected_contig/{sample}_phage.fasta"
+    container:
+        config["containers"]["select_phage_contig"]
+    log:
+        "log/{sample}/03_decontamination/03_select_phage_contig/{sample}.log"
+    script:
+        "../scripts/select_phage_contig.py"
+
+
+# Rearrangement of genome sequence
+rule r04_rearrangement:
+    input:
+        phage_fasta = "results/{sample}/03_decontamination/02_selected_contig/{sample}_phage.fasta",
+        r1 = "data/{sample}/raw_reads/{sample}_1.fastq.gz",
+        r2 = "data/{sample}/raw_reads/{sample}_2.fastq.gz"
+    output:
+        reoriented = "results/{sample}/04_rearrangement/{sample}_sequence.fasta",
+        report     = "results/{sample}/04_rearrangement/{sample}_PhageTerm_report.pdf",
+        stats      = "results/{sample}/04_rearrangement/{sample}_statistics.csv"
+    container:
+        config["containers"]["phageterm"]
+    log:
+        "log/{sample}/04_rearrangement/{sample}.log"
+    threads:
+        config["tools"]["phageterm"]["threads"]
+    params:
+        outdir = "results/{sample}/04_rearrangement/"
+    shell:
+        '''
+        PhageTerm.py \
+            -f {input.r1} \
+            -p {input.r2} \
+            -r {input.phage_fasta} \
+            -c {threads} \
+            -n {wildcards.sample} \
+            2> {log}
+        
+        mv {wildcards.sample}* results/{wildcards.sample}/04_rearrangement/
+        '''
+# / esto mirarlo pq no era asi
+
+# Gene prediction and functional annotation
+rule r05_annotation:
+    input:
+        genome = "results/{sample}/04_rearrangement/{sample}_sequence.fasta"
+    output:
+        gff           = "results/{sample}/05_annotation/{sample}_pharokka_output/pharokka.gff",
+        gbk           = "results/{sample}/05_annotation/{sample}_pharokka_output/pharokka.gbk",
+        tbl           = "results/{sample}/05_annotation/{sample}_pharokka_output/pharokka.tbl",
+        ffn           = "results/{sample}/05_annotation/{sample}_pharokka_output/pharokka.ffn",
+        faa           = "results/{sample}/05_annotation/{sample}_pharokka_output/pharokka.faa",
+        cds_functions = "results/{sample}/05_annotation/{sample}_pharokka_output/cds_functions.tsv",
+        merged_output = "results/{sample}/05_annotation/{sample}_pharokka_output/pharokka_cds_final_merged_output.tsv"
+    container:
+        config["containers"]["pharokka"]
+    log:
+        "log/{sample}/05_annotation/{sample}.log"
+    threads:
+        config["tools"]["pharokka"]["threads"]
+    params:
+        outdir = "results/{sample}/05_annotation/{sample}_pharokka_output",
+        db     = config["databases"]["pharokka"],
+        prefix = "{sample}"
+    shell:
+        '''
+        pharokka.py \
+            -i {input.genome} \
+            -o {params.outdir} \
+            -d {params.db} \
+            -t {threads} \
+            -p {params.prefix} \
+            2> {log}
+        '''
+
+
+# Taxonomy clasification
+rule r06_taxonomy:
+    input:
+        genome = "results/{sample}/04_rearrangement/{sample}_sequence.fasta"
+    output:
+        summary = "results/{sample}/06_taxonomy/{sample}_Summary_file.txt"
+    container:
+        config["containers"]["taxmyphage"]
+    log:
+        "log/{sample}/06_taxonomy/{sample}.log"
+    threads:
+        config["tools"]["taxmyphage"]["threads"]
+    params:
+        db = config["databases"]["taxmyphage"],
+        outdir  = "results/{sample}/06_taxonomy/",
+        prefix = "{sample}_"
+    shell:
+        '''
+        taxmyphage run \
+            -i {input.genome} \
+            -o {params.outdir} \
+            -p {params.prefix} \
+            -t {threads} \
+            -db {params.db} \
+            > {log} 2>&1
+        
+        && mv "{params.outdir}/Results_per_genome/{wildcards.sample}/"* "{params.outdir}"
+        && rm -rf "{params.outdir}/Results_per_genome/"
+        '''
+
+    
+# Lifestyle prediction
+rule r07_biosecurity_lifestyle_predictor:
+    input:
+        genome = "results/{sample}/04_rearrangement/{sample}_sequence.fasta"
+    output:
+        tsv = "results/{sample}/07_biosecurity/{sample}.fasta.bacphlip"        
+    container:
+        config["containers"]["bacphlip"]
+    log:
+        "log/{sample}/07_biosecurity/{sample}/{sample}.log"
+    threads:
+        config["tools"]["bacphlip"]["threads"]
+    shell:
+        '''
+        workdir=$(dirname {output.tsv})
+        mkdir -p "$workdir"
+        cp {input.genome} "$workdir/{wildcards.sample}.fasta"
+
+        bacphlip \
+            -i "$workdir/{wildcards.sample}.fasta" \
+            2> {log}
+
+        rm -f "$workdir/{wildcards.sample}.fasta"
+        '''
+
+

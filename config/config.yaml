@@ -1,0 +1,108 @@
+
+samples: ["SRR16219308"]
+
+
+# Databases
+databases:
+  checkv: "db_no_borrar/checkv/"
+  viralverify: "db_no_borrar/viralverify/nbc_hmms.hmm"
+  pharokka: "db_no_borrar/pharokka"
+  taxmyphage: "db_no_borrar/taxmyphage"
+
+
+# Parameters for tools
+tools: 
+  dag:
+    dag_dir: "results/08_report/01_dag"
+    log_dir: "logs/08_report/01_dag"
+
+  fastqc:
+    threads: 16
+    extra: >-
+      -q
+
+  bbduk:
+    threads: 16
+    minlength: 50
+    # ktrim:
+    # Trim reads to remove bases matching reference kmers, plus
+    # all bases to the left or right.
+    # Values:
+    #   f (don't trim), 
+    #   r (trim to the right), 
+    #   l (trim to the left)
+    ktrim: "r"
+    k: 23
+    # qtrim:
+    # Trim read ends to remove bases with quality below trimq.
+    # Performed AFTER looking for kmers.
+    # Values: 
+    #   rl (trim both ends), 
+    #   f (neither end), 
+    #   r (right end only), 
+    #   l (left end only),
+    #   w (sliding window).
+    qtrim: "rl"
+    # trimq:
+    # Regions with average quality BELOW this will be trimmed,
+   # if qtrim is set to something other than f.  Can be a 
+   # floating-point number like 7.3.
+    trimq: 30
+    trimpolyg: 10
+    trimpolya: 10
+    phix_ref: "/usr/local/opt/bbmap-39.81-1/resources/phix174_ill.ref.fa.gz"
+
+  seqtk:
+    threads: 16
+    n_reads: 50000
+    seed: 22
+    
+
+  spades:
+    threads: 16
+    extra: >-
+      --only-assembler
+
+
+  viralverify:
+    threads: 4
+    extra: >-
+      --thr 750
+
+
+  checkv:
+    threads: 4
+
+
+  phageterm:
+    threads: 16
+  
+
+  pharokka:
+    threads: 16
+
+  
+  taxmyphage:
+    threads: 16
+
+  
+  bacphlip:
+    threads: 16
+
+
+
+# Docker images 
+containers:
+  fastqc:              "docker://pegi3s/fastqc:0.12.1"
+  bbduk:               "docker://quay.io/biocontainers/bbmap:39.81--h9b5c0a0_1"
+  seqtk:               "docker://quay.io/biocontainers/seqtk:1.5--h577a1d6_1"
+  spades:              "docker://quay.io/biocontainers/spades:4.2.0--h8d6e82b_2"
+  viralverify:         "docker://quay.io/biocontainers/viralverify:1.1--hdfd78af_0"
+  checkv:              "docker://antoniopcamargo/checkv:0.8.1"
+  select_phage_contig: "docker://quay.io/biocontainers/pandas:0.23.4--py36hf8a1672_0" 
+  pharokka:            "docker://quay.io/biocontainers/pharokka:1.9.1--pyhdfd78af_1"
+  phageterm:           "docker://eluengor/phageterm:1.0.12-tfm"
+  taxmyphage:          "docker://quay.io/biocontainers/taxmyphage:0.3.6--pyhdfd78af_0"
+  # bacphlip 0.9.6 requires hmmsearch (HMMER3) at runtime, but the single-package
+  # biocontainer does not include it. Mulled image includes bacphlip + hmmer + numpy.
+  bacphlip:            "quay.io/biocontainers/mulled-v2-e16bfb0f667f2f3c236b32087aaf8c76a0cd2864:c64689d7d5c51670ff5841ec4af982edbe7aa406"
