@@ -1,3 +1,0 @@
-FROM quay.io/biocontainers/taxmyphage:0.3.6--pyhdfd78af_0
-
-RUN pip install --no-cache-dir pyarrow==17.0.0
