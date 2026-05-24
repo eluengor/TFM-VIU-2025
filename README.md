@@ -21,9 +21,9 @@ El flujo está implementado en **Snakemake**, contenerizado con **Docker** y ver
 TFM-VIU-2025/
 ├── workflow/
 │   ├── Snakefile
-│   └── scripts/
-│       └── select_phage_contig.py
-│       └── setup_databases.py
+├── scripts/
+│   ├── select_phage_contig.py
+│   └── setup_databases.py
 ├── config/
 │   └── config.yaml
 ├── dockerfiles/
