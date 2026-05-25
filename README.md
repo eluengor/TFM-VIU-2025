@@ -112,7 +112,7 @@ Cada herramienta del flujo se ejecuta dentro de su propio contenedor. A continua
 | taxMyPhage | `docker://quay.io/biocontainers/taxmyphage:0.3.6--pyhdfd78af_0` | [taxmyphage en BioContainers](https://quay.io/repository/biocontainers/taxmyphage) |
 | BACPHLIP + HMMER | `quay.io/biocontainers/mulled-v2-e16bfb0f667f2f3c236b32087aaf8c76a0cd2864:c64689d7d5c51670ff5841ec4af982edbe7aa406` | [mulled image en BioContainers](https://quay.io/repository/biocontainers/mulled-v2-e16bfb0f667f2f3c236b32087aaf8c76a0cd2864) — imagen combinada con BACPHLIP, HMMER3 y numpy |
 
-> **Nota sobre PhageTerm:** esta herramienta no dispone de imagen pública en repositorios de BioContainers. El `Dockerfile` utilizado para construir `eluengor/phageterm:1.0.12-tfm` se encuentra en `dockerfiles/phageterm/`.
+> **Nota sobre PhageTerm:** esta herramienta no dispone de imagen pública en repositorios de BioContainers. El `Dockerfile` utilizado para construir `eluengor/phageterm:1.0.12-tfm` se encuentra en `docker/Dockerfile.phageterm/`.
 
 > **Nota sobre BACPHLIP:** el paquete individual de BACPHLIP no incluye `hmmsearch` (HMMER3), que es una dependencia de ejecución obligatoria. Por este motivo se utiliza una imagen que combina BACPHLIP, HMMER y numpy en un único contenedor.
 
@@ -124,8 +124,8 @@ Cada herramienta del flujo se ejecuta dentro de su propio contenedor. A continua
 |---|---|---|---|
 | 0 | `r00_qc_raw_reads` | FastQC | Control de calidad de lecturas crudas |
 | 1 | `r01a` – `r01d` | BBDuk, FastQC, Seqtk | Recorte de adaptadores, eliminación de PhiX, QC post-trimming y subsampling |
-| 2 | `r02a` | SPAdes | Ensamblaje de novo |
-| 3 | `r03a`, `r03b`, `r03c` | ViralVerify, CheckV, script Python | Clasificación de contigs, evaluación de la calidad del ensamblaje y selección del contig fágico |
+| 2 | `r02_assembly` | SPAdes | Ensamblaje de novo |
+| 3 | `r03a` –  `r03c` | ViralVerify, CheckV, script Python | Clasificación de contigs, evaluación de la calidad del ensamblaje y selección del contig fágico |
 | 4 | `r04_rearrangement` | PhageTerm | Reordenamiento del genoma según el inicio biológico |
 | 5 | `r05_annotation` | Pharokka | Predicción de ORFs y anotación funcional y estructural |
 | 6 | `r06_taxonomy` | taxMyPhage | Clasificación taxonómica frente a la base de datos ICTV |
