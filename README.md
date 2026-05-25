@@ -11,7 +11,11 @@ Convocatoria: Mayo 2026
 
 Este repositorio contiene el flujo de trabajo bioinformático diseñado e implementado como parte de la revisión integrativa sobre herramientas para el análisis genómico de bacteriófagos purificados. El pipeline cubre las siete etapas canónicas identificadas en la revisión bibliográfica: control de calidad de lecturas, procesamiento, ensamblaje de novo, descontaminación y selección del contig fágico, reordenamiento del genoma, anotación funcional y estructural, clasificación taxonómica y cribado de bioseguridad.
 
+![Etapas canónicas de la caracterización genómica de fagos.](https://raw.githubusercontent.com/eluengor/TFM-VIU-2025/assets/images/mermaid_workflow.svg)
+
 El flujo está implementado en **Snakemake**, contenerizado con **Docker** y versionado con **Git/GitHub**, garantizando la reproducibilidad y portabilidad del análisis con independencia del entorno computacional.
+
+![Diagrama DAG del flujo de trabajo generado automáticamente por Snakemake.](https://raw.githubusercontent.com/eluengor/TFM-VIU-2025/assets/images/dag.svg)
 
 ---
 
